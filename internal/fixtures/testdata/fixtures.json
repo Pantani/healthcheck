@@ -1,0 +1,17 @@
+[
+  {
+    "name": "ethereum",
+    "host": "https://eth1.trezor.io",
+    "tests": [
+      {
+        "name": "block_height",
+        "method": "GET",
+        "url_path": "api",
+        "json_path": "blockbook.bestHeight",
+        "expression": "lastValue <= newValue",
+        "body": {},
+        "update_time": "5s"
+      }
+    ]
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "ethereum",
+    "host": "https://eth1.trezor.io",
+    "tests": [
+      {
+        "name": "block_height",
+        "method": "GET",
+        "url_path": "api",
+        "json_path": "blockbook.bestHeight",
+        "expression": "lastValue <= newValue",
+        "body": {},
+        "update_time": "5s"
+      },
+      {
+        "name": "host",
+        "method": "GET",
+        "url_path": "api",
+        "json_path": "blockbook.host",
+        "body": {},
+        "expression": "len(newValue) > 0",
+        "update_time": "10s"
+      }
+    ]
+  },
+  {
+    "name": "bitcoin",
+    "host": "https://btc1.trezor.io",
+    "tests": [
+      {
+        "name": "block_height",
+        "method": "GET",
+        "url_path": "api",
+        "json_path": "blockbook.bestHeight",
+        "body": {},
+        "expression": "lastValue <= newValue",
+        "update_time": "10s"
+      },
+      {
+        "name": "host",
+        "method": "GET",
+        "url_path": "api",
+        "json_path": "blockbook.host",
+        "body": {},
+        "expression": "len(newValue) > 0",
+        "update_time": "10s"
+      }
+    ]
+  }
+]

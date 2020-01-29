@@ -1,0 +1,44 @@
+{
+    "name": "TrustWallet HealthCheck",
+    "description": "HealthCheck application to monitoring rpc services",
+    "keywords": [
+        "monitoring",
+        "healthcheck"
+    ],
+    "website": "https://github.com/Pantani/healthcheck",
+    "repository": "https://github.com/Pantani/healthcheck",
+    "logo": "https://avatars0.githubusercontent.com/u/32179889",
+    "success_url": "/",
+    "formation": {
+        "web": {
+            "quantity": 1,
+            "size": "hobby"
+        }
+    },
+    "addons": [
+        "logentries:le_tryit",
+        {
+            "plan": "heroku-redis:hobby-dev",
+            "as": "REDIS"
+        }
+    ],
+    "buildpacks": [
+        {
+            "url": "heroku/go"
+        }
+    ],
+    "env": {
+        "PAGERDUTY_KEY": {
+            "description": "PagerDuty Access Key.",
+            "required": true
+        },
+        "PAGERDUTY_ESCALATION_POLICY": {
+            "description": "PagerDuty Escalation Policy ID.",
+            "required": true
+        },
+        "PAGERDUTY_SERVICE": {
+            "description": "PagerDuty Service ID.",
+            "required": true
+        }
+    }
+}
