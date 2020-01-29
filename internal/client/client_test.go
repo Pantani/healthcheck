@@ -9,7 +9,7 @@ import (
 func TestRequest_getBase(t *testing.T) {
 	tests := []struct {
 		name    string
-		BaseUrl string
+		BaseURL string
 		path    string
 		want    string
 	}{
@@ -20,7 +20,7 @@ func TestRequest_getBase(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Request{
-				BaseUrl: tt.BaseUrl,
+				BaseURL: tt.BaseURL,
 			}
 			if got := r.getBase(tt.path); got != tt.want {
 				t.Errorf("getBase() = %v, want %v", got, tt.want)

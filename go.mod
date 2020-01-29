@@ -12,6 +12,7 @@ require (
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.6.2
+	github.com/stretchr/testify v1.4.0
 	github.com/tidwall/gjson v1.4.0
 	github.com/trustwallet/blockatlas v1.0.33
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect

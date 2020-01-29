@@ -14,7 +14,7 @@ import (
 )
 
 func MetricsCollector() {
-	db, err := database.Init(config.Configuration.Redis.Url)
+	db, err := database.Init(config.Configuration.Redis.URL)
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func MetricsCollector() {
 		cl := client.InitClient(f.Host)
 		for _, t := range f.Tests {
 			spec := fmt.Sprintf("@every %s", t.UpdateTime)
-			err := AddFunc(c, f.Name, spec, t, cl, db)
+			err := AddFunc(c, f.Namespace, spec, t, cl, db)
 			if err != nil {
 				logger.Error(err)
 			}
@@ -46,12 +46,17 @@ func AddFunc(c *cron.Cron, namespace, spec string, t fixtures.Test, cl client.Re
 }
 
 func collect(namespace string, t fixtures.Test, c client.Request, db *database.Database) {
-	result, err := c.Execute(t.Method, t.UrlPath, t.Body)
+	result, err := c.Execute(t.Method, t.URLPath, t.Body)
 	if err != nil {
+		err = alert.SendEvent(namespace, t.Name, t.URLPath)
+		if err != nil {
+			logger.Error(err, "send request event error", logger.Params{"namespace": namespace, "name": t.Name})
+			return
+		}
 		return
 	}
 
-	value := gjson.Get(result, t.JsonPath)
+	value := gjson.Get(result, t.JSONPath)
 	if !value.Exists() {
 		logger.Error("gjson path doesn't exist", logger.Params{"namespace": namespace, "name": t.Name})
 		return
@@ -80,7 +85,7 @@ func collect(namespace string, t fixtures.Test, c client.Request, db *database.D
 		return
 	}
 
-	err = alert.SendEvent(namespace, t.Name, t.UrlPath)
+	err = alert.SendEvent(namespace, t.Name, t.URLPath)
 	if err != nil {
 		logger.Error(err, logParams)
 		return

@@ -10,7 +10,7 @@ import (
 
 type configuration struct {
 	Redis struct {
-		Url string
+		URL string
 	}
 	PagerDuty struct {
 		Key               string
@@ -24,7 +24,7 @@ var Configuration configuration
 // set dummy values to force viper to search for these keys in environment variables
 // the AutomaticEnv() only searches for already defined keys in a config file, default values or kvstore struct.
 func setDefaults() {
-	viper.SetDefault("Redis.Url", "redis://localhost:6379")
+	viper.SetDefault("Redis.URL", "redis://localhost:6379")
 	viper.SetDefault("PagerDuty.Key", "")
 	viper.SetDefault("PagerDuty.Service", "")
 	viper.SetDefault("PagerDuty.Escalation_Policy", "")
@@ -38,7 +38,7 @@ func InitConfig() {
 	if err := viper.Unmarshal(&Configuration); err != nil {
 		logger.Error(err, "Error Unmarshal Viper Config File")
 	}
-	log.Printf("REDIS_URL: %s", Configuration.Redis.Url)
+	log.Printf("REDIS_URL: %s", Configuration.Redis.URL)
 	log.Printf("PAGERDUTY_KEY: %s", Configuration.PagerDuty.Key)
 	log.Printf("PAGERDUTY_SERVICE: %s", Configuration.PagerDuty.Service)
 	log.Printf("PAGERDUTY_ESCALATION_POLICY: %s", Configuration.PagerDuty.Escalation_Policy)

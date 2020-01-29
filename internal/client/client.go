@@ -12,20 +12,20 @@ import (
 )
 
 type Request struct {
-	BaseUrl    string
+	BaseURL    string
 	Headers    map[string]string
-	HttpClient *http.Client
+	HTTPClient *http.Client
 }
 
 var DefaultClient = &http.Client{
 	Timeout: time.Second * 15,
 }
 
-func InitClient(baseUrl string) Request {
+func InitClient(baseURL string) Request {
 	return Request{
 		Headers:    make(map[string]string),
-		HttpClient: DefaultClient,
-		BaseUrl:    baseUrl,
+		HTTPClient: DefaultClient,
+		BaseURL:    baseURL,
 	}
 }
 
@@ -41,7 +41,7 @@ func (r *Request) Execute(method string, path string, body interface{}) (string,
 		req.Header.Set(key, value)
 	}
 
-	res, err := r.HttpClient.Do(req)
+	res, err := r.HTTPClient.Do(req)
 	if err != nil {
 		return "", errors.E(err, errors.Params{"url": url, "method": method})
 	}
@@ -52,9 +52,9 @@ func (r *Request) Execute(method string, path string, body interface{}) (string,
 
 func (r *Request) getBase(path string) string {
 	if path == "" {
-		return fmt.Sprintf("%s", r.BaseUrl)
+		return fmt.Sprintf("%s", r.BaseURL)
 	}
-	return fmt.Sprintf("%s/%s", r.BaseUrl, path)
+	return fmt.Sprintf("%s/%s", r.BaseURL, path)
 }
 
 func getBody(body interface{}) (buf io.ReadWriter) {
