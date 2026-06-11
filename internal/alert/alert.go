@@ -2,23 +2,52 @@ package alert
 
 import (
 	"fmt"
+
 	"github.com/PagerDuty/go-pagerduty"
 	"github.com/Pantani/healthcheck/internal/config"
-	"github.com/trustwallet/blockatlas/pkg/errors"
-	"github.com/trustwallet/blockatlas/pkg/logger"
+	"log/slog"
 	"strings"
 )
 
+type PagerDuty struct {
+	client           *pagerduty.Client
+	service          string
+	escalationPolicy string
+}
+
+func NewPagerDuty(cfg config.PagerDuty) (*PagerDuty, error) {
+	if cfg.Key == "" {
+		return nil, fmt.Errorf("PAGERDUTY_KEY is required")
+	}
+	if cfg.Service == "" {
+		return nil, fmt.Errorf("PAGERDUTY_SERVICE is required")
+	}
+	if cfg.EscalationPolicy == "" {
+		return nil, fmt.Errorf("PAGERDUTY_ESCALATION_POLICY is required")
+	}
+	return &PagerDuty{
+		client:           pagerduty.NewClient(cfg.Key),
+		service:          cfg.Service,
+		escalationPolicy: cfg.EscalationPolicy,
+	}, nil
+}
+
 func SendEvent(namespace, name, path string) error {
-	logParams := logger.Params{"namespace": namespace, "name": name, "path": path}
-	client := pagerduty.NewClient(config.Configuration.PagerDuty.Key)
-	incident, err := client.CreateIncident("Health Check Application", &pagerduty.CreateIncidentOptions{
+	pagerDuty, err := NewPagerDuty(config.Active.PagerDuty)
+	if err != nil {
+		return err
+	}
+	return pagerDuty.SendEvent(namespace, name, path)
+}
+
+func (p *PagerDuty) SendEvent(namespace, name, path string) error {
+	incident, err := p.client.CreateIncident("Health Check Application", &pagerduty.CreateIncidentOptions{
 		Urgency:     "high",
 		Type:        "incident",
 		IncidentKey: namespace + "_" + name,
 		Title:       namespace + " - " + name,
 		Service: &pagerduty.APIReference{
-			ID:   config.Configuration.PagerDuty.Service,
+			ID:   p.service,
 			Type: "service",
 		},
 		Body: &pagerduty.APIDetails{
@@ -26,15 +55,14 @@ func SendEvent(namespace, name, path string) error {
 			Details: getDescription(namespace, name, path),
 		},
 		EscalationPolicy: &pagerduty.APIReference{
-			ID:   config.Configuration.PagerDuty.Escalation_Policy,
+			ID:   p.escalationPolicy,
 			Type: "escalation_policy",
 		},
 	})
 	if err != nil {
-		return errors.E(err, "cannot create PagerDuty event", logParams)
+		return fmt.Errorf("create PagerDuty incident for %s.%s: %w", namespace, name, err)
 	}
-	logger.Info("PagerDuty incident created", logParams,
-		logger.Params{"id": incident.ID, "number": incident.IncidentNumber, "url": incident.HTMLURL})
+	slog.Info("PagerDuty incident created", "namespace", namespace, "name", name, "id", incident.ID, "number", incident.IncidentNumber, "url", incident.HTMLURL)
 	return nil
 }
 

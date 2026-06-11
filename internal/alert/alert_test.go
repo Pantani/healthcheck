@@ -1,6 +1,28 @@
 package alert
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Pantani/healthcheck/internal/config"
+)
+
+func TestNewPagerDutyValidation(t *testing.T) {
+	if _, err := NewPagerDuty(config.PagerDuty{}); err == nil {
+		t.Fatal("NewPagerDuty() error = nil, want missing key error")
+	}
+
+	got, err := NewPagerDuty(config.PagerDuty{
+		Key:              "key",
+		Service:          "service",
+		EscalationPolicy: "policy",
+	})
+	if err != nil {
+		t.Fatalf("NewPagerDuty() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("NewPagerDuty() = nil")
+	}
+}
 
 func Test_getDescription(t *testing.T) {
 	type args struct {

@@ -1,45 +1,130 @@
 package config
 
 import (
+	"fmt"
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/spf13/viper"
-	"github.com/trustwallet/blockatlas/pkg/logger"
 	"log"
-	"strings"
+	"os"
+	"time"
 )
 
-type configuration struct {
-	Redis struct {
-		URL string
-	}
-	PagerDuty struct {
-		Key               string
-		Service           string
-		Escalation_Policy string
+const (
+	DefaultFixturesPath = "configs/fixtures.json"
+	DefaultRedisURL     = "redis://localhost:6379/0"
+	DefaultHTTPTimeout  = 15 * time.Second
+)
+
+type Redis struct {
+	URL string
+}
+
+type PagerDuty struct {
+	Key              string
+	Service          string
+	EscalationPolicy string
+}
+
+type Fixtures struct {
+	Path string
+}
+
+type HTTP struct {
+	Timeout time.Duration
+}
+
+type Configuration struct {
+	Redis     Redis
+	PagerDuty PagerDuty
+	Fixtures  Fixtures
+	HTTP      HTTP
+}
+
+var Active = Default()
+
+func Default() Configuration {
+	return Configuration{
+		Redis: Redis{
+			URL: DefaultRedisURL,
+		},
+		Fixtures: Fixtures{
+			Path: DefaultFixturesPath,
+		},
+		HTTP: HTTP{
+			Timeout: DefaultHTTPTimeout,
+		},
 	}
 }
 
-var Configuration configuration
+func Load() (Configuration, error) {
+	cfg := Default()
+	cfg.Redis.URL = env("REDIS_URL", cfg.Redis.URL)
+	cfg.PagerDuty.Key = env("PAGERDUTY_KEY", cfg.PagerDuty.Key)
+	cfg.PagerDuty.Service = env("PAGERDUTY_SERVICE", cfg.PagerDuty.Service)
+	cfg.PagerDuty.EscalationPolicy = env("PAGERDUTY_ESCALATION_POLICY", cfg.PagerDuty.EscalationPolicy)
+	cfg.Fixtures.Path = env("HEALTHCHECK_FIXTURES_FILE", cfg.Fixtures.Path)
 
-// set dummy values to force viper to search for these keys in environment variables
-// the AutomaticEnv() only searches for already defined keys in a config file, default values or kvstore struct.
-func setDefaults() {
-	viper.SetDefault("Redis.URL", "redis://localhost:6379")
-	viper.SetDefault("PagerDuty.Key", "")
-	viper.SetDefault("PagerDuty.Service", "")
-	viper.SetDefault("PagerDuty.Escalation_Policy", "")
+	timeout := env("HEALTHCHECK_HTTP_TIMEOUT", "")
+	if timeout != "" {
+		parsed, err := time.ParseDuration(timeout)
+		if err != nil {
+			return Configuration{}, fmt.Errorf("invalid HEALTHCHECK_HTTP_TIMEOUT %q: %w", timeout, err)
+		}
+		cfg.HTTP.Timeout = parsed
+	}
+	return cfg, nil
 }
 
-// initConfig reads in config file and ENV variables if set.
+func (cfg Configuration) ValidateRuntime() error {
+	if cfg.Redis.URL == "" {
+		return fmt.Errorf("REDIS_URL is required")
+	}
+	if cfg.PagerDuty.Key == "" {
+		return fmt.Errorf("PAGERDUTY_KEY is required")
+	}
+	if cfg.PagerDuty.Service == "" {
+		return fmt.Errorf("PAGERDUTY_SERVICE is required")
+	}
+	if cfg.PagerDuty.EscalationPolicy == "" {
+		return fmt.Errorf("PAGERDUTY_ESCALATION_POLICY is required")
+	}
+	if cfg.Fixtures.Path == "" {
+		return fmt.Errorf("HEALTHCHECK_FIXTURES_FILE cannot be empty")
+	}
+	if cfg.HTTP.Timeout <= 0 {
+		return fmt.Errorf("HEALTHCHECK_HTTP_TIMEOUT must be greater than zero")
+	}
+	return nil
+}
+
+func Apply(cfg Configuration) {
+	Active = cfg
+}
+
 func InitConfig() {
-	setDefaults()
-	viper.AutomaticEnv() // read in environment variables that match
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	if err := viper.Unmarshal(&Configuration); err != nil {
-		logger.Error(err, "Error Unmarshal Viper Config File")
+	cfg, err := Load()
+	if err != nil {
+		log.Printf("configuration error: %v", err)
 	}
-	log.Printf("REDIS_URL: %s", Configuration.Redis.URL)
-	log.Printf("PAGERDUTY_KEY: %s", Configuration.PagerDuty.Key)
-	log.Printf("PAGERDUTY_SERVICE: %s", Configuration.PagerDuty.Service)
-	log.Printf("PAGERDUTY_ESCALATION_POLICY: %s", Configuration.PagerDuty.Escalation_Policy)
+	Apply(cfg)
+	log.Printf("REDIS_URL: %s", Active.Redis.URL)
+	log.Printf("PAGERDUTY_KEY: %s", secretState(Active.PagerDuty.Key))
+	log.Printf("PAGERDUTY_SERVICE: %s", Active.PagerDuty.Service)
+	log.Printf("PAGERDUTY_ESCALATION_POLICY: %s", Active.PagerDuty.EscalationPolicy)
+	log.Printf("HEALTHCHECK_FIXTURES_FILE: %s", Active.Fixtures.Path)
+	log.Printf("HEALTHCHECK_HTTP_TIMEOUT: %s", Active.HTTP.Timeout)
+}
+
+func env(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func secretState(value string) string {
+	if value == "" {
+		return "<unset>"
+	}
+	return "<set>"
 }
