@@ -1,1 +1,1 @@
-web: bin/healthcheck metrics :$PORT
+worker: bin/healthcheck metrics

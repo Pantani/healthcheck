@@ -1,86 +1,61 @@
 # Services Health Check
 
-Light application to run HTTP tests and evaluate expressions with results.
+Small Go service that runs scheduled HTTP checks, extracts values from JSON responses, evaluates expressions against the previous value, and opens PagerDuty incidents when a check fails.
 
-## How It Works?
+## What It Does
 
-The application parse all tests inside the test file. After that, it executes the test, saves the value inside the `Redis` database and evaluates the expression, if the expression is false or the request fails, the application going to create an incident inside the PargerDuty. 
+Each fixture defines a namespace, a host, and one or more checks. For every check the service:
 
-## Setup
+1. Sends an HTTP request to the configured host and relative path.
+2. Fails the check when the request errors or returns a non-2xx status.
+3. Extracts a JSON value using `gjson`.
+4. Reads the previous value for the same namespace/check from Redis.
+5. Stores the new value in Redis.
+6. Evaluates the configured `expr` expression with `lastValue` and `newValue`.
+7. Creates a PagerDuty incident when the expression returns `false`.
 
-### Quick start
+## Requirements
 
-Deploy it in less than 30 seconds!
+- Go 1.26+
+- Redis
+- PagerDuty REST API key, service ID, and escalation policy ID
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Pantani/healthcheck)
+## Quick Start
 
-### Prerequisite
-* [GO](https://golang.org/doc/install) `1.13+`
-* Locally running [Redis](https://redis.io/topics/quickstart) or URL to remote instance (required for Observer only).
-
-### From Source 
-
-```shell
-go get -u github.com/Pantani/healthcheck
-cd $GOPATH/src/github.com/Pantani/healthcheck
+```sh
+cp configs/fixtures.json /tmp/healthcheck-fixtures.json
+export REDIS_URL=redis://localhost:6379/0
+export PAGERDUTY_KEY=your-api-key
+export PAGERDUTY_SERVICE=your-service-id
+export PAGERDUTY_ESCALATION_POLICY=your-escalation-policy-id
+go run . metrics --fixtures /tmp/healthcheck-fixtures.json
 ```
 
-### Make commands
+The service keeps running until it receives `SIGINT` or `SIGTERM`.
 
-```makefile
-- install     Install missing dependencies. Runs `go get` internally. e.g.; make install get=github.com/foo/bar
-- start       Start API in development mode.
-- stop        Stop development mode.
-- restart     Restart in development mode.
-- compile     Compile the binary.
-- exec        Run given command. e.g.; make exec run="go test ./..."
-- clean       Clean build files. Runs `go clean` internally.
-- test        Run all unit tests.
-- fmt         Run `go fmt` for all go files.
-- goreleaser  Release the last tag version with GoReleaser.
-- govet       Run go vet.
-- golint      Run golint.
-```
-  
-### Environment Variables
+## Configuration
 
-All environment variables for developing are set inside the .env file.
+Environment variables:
 
-```dotenv
-REDIS_URL=Redis Database URL
-PAGERDUTY_KEY=PargerDuty Access Key
-PAGERDUTY_ESCALATION_POLICY=PagerDuty Escalation Policy ID
-PAGERDUTY_SERVICE=PagerDuty Service ID
+| Name | Default | Description |
+| --- | --- | --- |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis URL used to store previous check values. |
+| `PAGERDUTY_KEY` | empty | PagerDuty REST API key. Required at runtime. |
+| `PAGERDUTY_SERVICE` | empty | PagerDuty service ID. Required at runtime. |
+| `PAGERDUTY_ESCALATION_POLICY` | empty | PagerDuty escalation policy ID. Required at runtime. |
+| `HEALTHCHECK_FIXTURES_FILE` | `configs/fixtures.json` | Fixture file path. |
+| `HEALTHCHECK_HTTP_TIMEOUT` | `15s` | HTTP request timeout as a Go duration. |
+
+CLI flags override environment values:
+
+```sh
+healthcheck metrics \
+  --fixtures configs/fixtures.json \
+  --redis-url redis://localhost:6379/0 \
+  --http-timeout 10s
 ```
 
-### Create Tests
-
-To create a new test, do you need to edit the file `config/fixtures.json`. 
-
-#### Test Structure
-```
-[
-  {
-    "namespace": string, # test namespace.
-    "host": string, # the host to be reached.
-    "tests": [ # Array of tests to be executed in the current namespace.
-      {
-        "name": string, # test name.
-        "method": string, # HTTP method type.
-        "url_path": string, # URL path to the test.
-        "json_path": string, # path inside JSON to get the information to be saved.
-        "body": any, # body for POST tests.
-        "expression": string, # expression used to evaluate the test.
-        "update_time": string # test update time.
-      }
-      ...
-    ]
-  },
-  ...
-]
-```
-
-#### Test Example
+## Fixture Format
 
 ```json
 [
@@ -93,67 +68,46 @@ To create a new test, do you need to edit the file `config/fixtures.json`.
         "method": "GET",
         "url_path": "api",
         "json_path": "blockbook.bestHeight",
+        "body": {},
         "expression": "lastValue <= newValue",
-        "update_time": "5s"
-      },
-      {
-        "name": "host",
-        "method": "GET",
-        "url_path": "api",
-        "json_path": "blockbook.host",
-        "expression": "len(newValue) > 0",
-        "update_time": "10s"
-      }
-    ]
-  },
-  {
-    "namespace": "ethereum",
-    "host": "https://infura.io",
-    "tests": [
-      {
-        "name": "eth_getBlockByNumber",
-        "method": "POST",
-        "json_path": "result.hash",
-        "body": {"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x1b4", true],"id":1},
-        "expression": "newValue matches lastValue",
-        "update_time": "10s"
+        "update_time": "30s"
       }
     ]
   }
 ]
 ```
 
-#### Expressions
+Fields:
 
-We are using `expr` to evaluate the expressions. You can find the expression language [here](https://github.com/antonmedv/expr/blob/master/docs/Language-Definition.md)
+| Field | Required | Description |
+| --- | --- | --- |
+| `namespace` | yes | Logical group for checks and Redis storage. |
+| `host` | yes | HTTP or HTTPS base URL. |
+| `tests[].name` | yes | Check name, unique within a namespace. |
+| `tests[].method` | yes | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, or `OPTIONS`. |
+| `tests[].url_path` | no | Relative path appended to `host`; absolute URLs are rejected. |
+| `tests[].json_path` | yes | `gjson` path used to extract the response value. |
+| `tests[].body` | no | JSON request body. When present, `Content-Type: application/json` is sent. |
+| `tests[].expression` | yes | `expr` expression that must return a boolean. |
+| `tests[].update_time` | yes | Go duration used by the scheduler, for example `10s`, `1m`, or `5m`. |
 
-#### Default Variables
+Expressions receive:
 
-The Default variables give you a convenient way to evaluate expressions in your tests. 
-These variables are automatically set by the application:
+| Variable | Description |
+| --- | --- |
+| `lastValue` | Value stored from the previous run. Defaults to `0` when Redis has no value yet. |
+| `newValue` | Value extracted from the current response. |
 
-| Variable       | Description                                   |
-| :------------: | :-------------------------------------------- |
-| lastValue      | The result value from the last test executed  | 
-| newValue       | The result value from the current tests       | 
+## Development
 
-
-### Tools
-
--   Setup Redis:
-
-```shell
-brew install redis
+```sh
+make test
+make vet
+make build
+make check
 ```
 
--   Running in the IDE ( GoLand ):
+Useful docs:
 
-1.  Run;
-2.  Edit configuration;
-3.  New Go build configuration;
-4.  Select `directory` as configuration type;
-5.  Set `metrics` as program argument and `-i` as Go tools argument; 
-
-### Unit Tests
-
-To run the unit tests: `make test`.
+- [Operations runbook](docs/OPERATIONS.md)
+- [Audit and modernization plan](docs/AUDIT.md)

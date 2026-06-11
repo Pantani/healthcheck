@@ -1,6 +1,6 @@
 {
-    "name": "TrustWallet HealthCheck",
-    "description": "HealthCheck application to monitoring rpc services",
+    "name": "Services Health Check",
+    "description": "Scheduled HTTP health checks with Redis-backed state and PagerDuty incidents",
     "keywords": [
         "monitoring",
         "healthcheck"
@@ -10,13 +10,12 @@
     "logo": "https://avatars0.githubusercontent.com/u/32179889",
     "success_url": "/",
     "formation": {
-        "web": {
+        "worker": {
             "quantity": 1,
-            "size": "hobby"
+            "size": "basic"
         }
     },
     "addons": [
-        "logentries:le_tryit",
         {
             "plan": "heroku-redis:hobby-dev",
             "as": "REDIS"
@@ -39,6 +38,11 @@
         "PAGERDUTY_SERVICE": {
             "description": "PagerDuty Service ID.",
             "required": true
+        },
+        "HEALTHCHECK_HTTP_TIMEOUT": {
+            "description": "HTTP timeout as a Go duration.",
+            "required": false,
+            "value": "15s"
         }
     }
 }

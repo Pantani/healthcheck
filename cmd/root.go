@@ -1,35 +1,73 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"github.com/Pantani/healthcheck/internal/config"
 	"github.com/spf13/cobra"
-	"github.com/trustwallet/blockatlas/pkg/logger"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-var cfgFile string
+var (
+	fixturesPath string
+	redisURL     string
+	httpTimeout  time.Duration
+)
 
-// rootCmd represents the base command when called without any subcommands
 var (
 	rootCmd = &cobra.Command{
-		Use:   "Metric Collector",
-		Short: "Collect metrics and format for Prometheus pull",
+		Use:          "healthcheck",
+		Short:        "Run scheduled HTTP health checks and create PagerDuty incidents on failures",
+		SilenceUsage: true,
 	}
 )
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	loadConf := func() { config.InitConfig() }
-	loadLogger := func() { logger.InitLogger() }
-	cobra.OnInitialize(loadConf)
-	cobra.OnInitialize(loadLogger)
+	defaults := config.Default()
+	rootCmd.PersistentFlags().StringVar(&fixturesPath, "fixtures", defaults.Fixtures.Path, "path to the JSON fixture file")
+	rootCmd.PersistentFlags().StringVar(&redisURL, "redis-url", defaults.Redis.URL, "Redis URL used to store the previous check value")
+	rootCmd.PersistentFlags().DurationVar(&httpTimeout, "http-timeout", defaults.HTTP.Timeout, "HTTP request timeout")
+}
+
+func buildConfig(cmd *cobra.Command) (config.Configuration, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Configuration{}, err
+	}
+	if flagChanged(cmd, "fixtures") {
+		cfg.Fixtures.Path = fixturesPath
+	}
+	if flagChanged(cmd, "redis-url") {
+		cfg.Redis.URL = redisURL
+	}
+	if flagChanged(cmd, "http-timeout") {
+		cfg.HTTP.Timeout = httpTimeout
+	}
+	config.Apply(cfg)
+	return cfg, nil
+}
+
+func commandContext(cmd *cobra.Command) (context.Context, func()) {
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	return ctx, cancel
+}
+
+func flagChanged(cmd *cobra.Command, name string) bool {
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		return flag.Changed
+	}
+	if flag := cmd.InheritedFlags().Lookup(name); flag != nil {
+		return flag.Changed
+	}
+	return false
 }
